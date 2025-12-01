@@ -12,6 +12,7 @@ const STORAGE_KEYS = {
   FRIEND_REQUESTS: '@meshage_friend_requests',
   ONBOARDING_COMPLETE: '@meshage_onboarding_complete',
   CHAT_HISTORY_PREFIX: '@meshage_chat_', // Prefix for individual chat histories
+  CHAT_READ_RECEIPTS: '@meshage_chat_read_receipts',
 };
 
 // Generate a unique persistent ID (UUID v4)
@@ -230,6 +231,41 @@ export const StorageService = {
       console.log(`Chat history cleared for friend: ${friendId}`);
     } catch (error) {
       console.error('Error clearing chat history:', error);
+    }
+  },
+
+  // Chat read receipts (per friend)
+  getChatReadReceipts: async (): Promise<Record<string, number>> => {
+    try {
+      const receiptsJson = await AsyncStorage.getItem(STORAGE_KEYS.CHAT_READ_RECEIPTS);
+      if (!receiptsJson) return {};
+      return JSON.parse(receiptsJson);
+    } catch (error) {
+      console.error('Error getting chat read receipts:', error);
+      return {};
+    }
+  },
+
+  getLastReadTimestamp: async (friendId: string): Promise<number> => {
+    try {
+      const receipts = await StorageService.getChatReadReceipts();
+      return receipts[friendId] || 0;
+    } catch (error) {
+      console.error('Error getting last read timestamp:', error);
+      return 0;
+    }
+  },
+
+  markChatAsRead: async (friendId: string, timestamp?: number): Promise<void> => {
+    try {
+      const receipts = await StorageService.getChatReadReceipts();
+      receipts[friendId] = timestamp ?? Date.now();
+      await AsyncStorage.setItem(
+        STORAGE_KEYS.CHAT_READ_RECEIPTS,
+        JSON.stringify(receipts)
+      );
+    } catch (error) {
+      console.error('Error marking chat as read:', error);
     }
   },
 };

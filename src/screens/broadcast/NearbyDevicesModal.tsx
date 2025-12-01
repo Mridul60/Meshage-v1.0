@@ -20,6 +20,7 @@ interface Device {
     id: string;
     name: string;
     isFriend: boolean;
+    isConnected: boolean;
 }
 
 interface NearbyDevicesModalProps {
@@ -111,9 +112,12 @@ const NearbyDevicesModal: React.FC<NearbyDevicesModalProps> = ({
     const renderDeviceItem = ({ item }: { item: Device }) => (
         <View style={styles.deviceItem}>
             <View style={styles.deviceInfo}>
-                {/* <View style={styles.avatar}>
-                    <Ionicons name="person" size={20} color="#666" />
-                </View> */}
+                <View
+                    style={[
+                        styles.deviceStatusDot,
+                        item.isConnected ? styles.deviceStatusDotConnected : styles.deviceStatusDotDisconnected,
+                    ]}
+                />
                 <View style={styles.deviceTextContainer}>
                     <Text style={styles.deviceName}>{item.name}</Text>
                     <Text style={styles.deviceStatus}>
@@ -279,17 +283,6 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         flex: 1,
     },
-    avatar: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: '#E5E5E5',
-        borderWidth: 0.3,
-        borderColor: '#000',
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginRight: 12,
-    },
     deviceTextContainer: {
         flex: 1,
     },
@@ -302,6 +295,20 @@ const styles = StyleSheet.create({
     deviceStatus: {
         fontSize: 13,
         color: '#666',
+    },
+    deviceStatusDot: {
+        width: 10,
+        height: 10,
+        borderRadius: 5,
+        borderWidth: 1,
+        borderColor: '#000',
+        marginRight: 8,
+    },
+    deviceStatusDotConnected: {
+        backgroundColor: '#22C55E',
+    },
+    deviceStatusDotDisconnected: {
+        backgroundColor: '#EF4444',
     },
     actionButton: {
         padding: 8,

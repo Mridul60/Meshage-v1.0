@@ -9,7 +9,9 @@ import {
     StyleSheet,
     KeyboardAvoidingView,
     Platform,
+    Animated,
 } from 'react-native';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { Send } from 'lucide-react-native';
 
 import NearbyDevicesModal from './NearbyDevicesModal';
@@ -67,10 +69,49 @@ export default function BroadcastScreen({ navigation }: BroadcastScreenProps) {
         id: peer.deviceAddress,
         name: peer.displayName || peer.deviceName,
         isFriend: isFriend(peer.persistentId),
+        // connectedPeers is a list of connected device addresses
+        isConnected: connectedPeers.includes(peer.deviceAddress),
     }));
 
     const [showRequests, setShowRequests] = React.useState(false);
+    const [requestsVisible, setRequestsVisible] = React.useState(false);
+    const requestsTranslateY = React.useRef(new Animated.Value(200)).current;
+    const requestsBackdropOpacity = React.useRef(new Animated.Value(0)).current;
     const pendingRequestsCount = friendRequests.filter((r: FriendRequest) => r.type === 'incoming').length;
+
+    React.useEffect(() => {
+        if (showRequests) {
+            setRequestsVisible(true);
+            Animated.parallel([
+                Animated.spring(requestsTranslateY, {
+                    toValue: 0,
+                    useNativeDriver: true,
+                    tension: 65,
+                    friction: 11,
+                }),
+                Animated.timing(requestsBackdropOpacity, {
+                    toValue: 1,
+                    duration: 250,
+                    useNativeDriver: true,
+                }),
+            ]).start();
+        } else {
+            Animated.parallel([
+                Animated.timing(requestsTranslateY, {
+                    toValue: 200,
+                    duration: 200,
+                    useNativeDriver: true,
+                }),
+                Animated.timing(requestsBackdropOpacity, {
+                    toValue: 0,
+                    duration: 200,
+                    useNativeDriver: true,
+                }),
+            ]).start(() => {
+                setRequestsVisible(false);
+            });
+        }
+    }, [showRequests]);
 
     return (
         <View style={styles.container}>
@@ -205,10 +246,27 @@ export default function BroadcastScreen({ navigation }: BroadcastScreenProps) {
             />
 
             {/* FRIEND REQUESTS OVERLAY */}
-            {showRequests && (
-                <View style={styles.requestsOverlay}>
-                    <View style={styles.requestsCard}>
-                        <Text style={styles.requestsTitle}>Friend Requests</Text>
+            {requestsVisible && (
+                <Animated.View style={[styles.requestsOverlay, { opacity: requestsBackdropOpacity }]}>
+                    <Animated.View style={[styles.requestsCard, { transform: [{ translateY: requestsTranslateY }] }]}>
+                        <View style={styles.requestsDragHandleContainer}>
+                            <View style={styles.requestsDragHandle} />
+                        </View>
+                        <View style={styles.requestsHeader}>
+                            <View style={styles.requestsHeaderTextContainer}>
+                                <Text style={styles.requestsTitle}>
+                                    Friend Requests{pendingRequestsCount > 0 ? ` (${pendingRequestsCount})` : ''}
+                                </Text>
+                            </View>
+                            <TouchableOpacity
+                                style={styles.requestsCloseIcon}
+                                onPress={() => setShowRequests(false)}
+                                activeOpacity={0.7}
+                            >
+                                <Ionicons name="close" size={24} color="#F59E0B" />
+                            </TouchableOpacity>
+                        </View>
+
                         {friendRequests.filter((r: FriendRequest) => r.type === 'incoming').length === 0 ? (
                             <Text style={styles.requestsEmpty}>No pending requests</Text>
                         ) : (
@@ -216,9 +274,12 @@ export default function BroadcastScreen({ navigation }: BroadcastScreenProps) {
                                 .filter((r: FriendRequest) => r.type === 'incoming')
                                 .map((request: FriendRequest) => (
                                     <View key={request.persistentId} style={styles.requestItem}>
-                                        <View>
+                                        <View style={styles.requestInfo}>
                                             <Text style={styles.requestName}>{request.displayName}</Text>
-                                            <Text style={styles.requestId}>{request.persistentId}</Text>
+
+                                            <Text style={styles.requestId}>
+                                                ID · {(request.persistentId || '').split('-')[0]}
+                                            </Text>
                                         </View>
                                         <View style={styles.requestActions}>
                                             <TouchableOpacity
@@ -235,22 +296,14 @@ export default function BroadcastScreen({ navigation }: BroadcastScreenProps) {
                                                     await handleRejectFriendRequest(request);
                                                 }}
                                             >
-                                                <Text style={styles.requestRejectText}>X</Text>
+                                                <Ionicons name="trash" size={16} color="#000" />
                                             </TouchableOpacity>
                                         </View>
                                     </View>
                                 ))
                         )}
-
-                        <TouchableOpacity
-                            style={styles.requestsClose}
-                            onPress={() => setShowRequests(false)}
-                            activeOpacity={0.7}
-                        >
-                            <Text style={styles.requestsCloseText}>Close</Text>
-                        </TouchableOpacity>
-                    </View>
-                </View>
+                    </Animated.View>
+                </Animated.View>
             )}
         </View>
     );
@@ -450,7 +503,7 @@ const styles = StyleSheet.create({
     },
     requestsCard: {
         width: '100%',
-        maxHeight: '55%',
+        maxHeight: '45%',
         backgroundColor: '#292929',
         borderTopLeftRadius: 20,
         borderTopRightRadius: 20,
@@ -460,11 +513,40 @@ const styles = StyleSheet.create({
         borderTopWidth: 1,
         borderColor: '#000',
     },
+    requestsDragHandleContainer: {
+        alignItems: 'center',
+        paddingVertical: 8,
+    },
+    requestsDragHandle: {
+        width: 40,
+        height: 4,
+        backgroundColor: '#FFFFFF',
+        borderRadius: 2,
+        opacity: 0.9,
+    },
+    requestsHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingBottom: 8,
+    },
+    requestsHeaderTextContainer: {
+        flex: 1,
+    },
+    requestsCloseIcon: {
+        padding: 4,
+        marginLeft: 12,
+    },
     requestsTitle: {
         fontSize: 20,
         fontWeight: '700',
         color: '#E5E1DE',
-        marginBottom: 8,
+        marginBottom: 4,
+    },
+    requestsSubtitle: {
+        fontSize: 12,
+        color: '#A3A3A3',
+        marginBottom: 10,
     },
     requestsEmpty: {
         fontSize: 13,
@@ -475,18 +557,24 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        paddingVertical: 10,
-        borderBottomWidth: 1,
-        borderBottomColor: '#3A3A3A',
+        backgroundColor: '#FFF',
+        borderRadius: 12,
+        paddingHorizontal: 12,
+        paddingVertical: 12,
+        marginBottom: 8,
+    },
+    requestInfo: {
+        flexShrink: 1,
+        paddingRight: 8,
     },
     requestName: {
         fontSize: 15,
         fontWeight: '600',
-        color: '#FFF',
+        color: '#000',
     },
     requestId: {
         fontSize: 11,
-        color: '#AAA',
+        color: '#666',
     },
     requestActions: {
         flexDirection: 'row',
@@ -497,7 +585,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 12,
         paddingVertical: 4,
         borderRadius: 999,
-        backgroundColor: '#22C55E',
+        backgroundColor: '#F59E0B',
         borderWidth: 1,
         borderColor: '#000',
     },
@@ -507,17 +595,14 @@ const styles = StyleSheet.create({
         color: '#000',
     },
     requestReject: {
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-        borderRadius: 999,
+        width: 28,
+        height: 28,
+        borderRadius: 14,
         backgroundColor: '#EF4444',
+        alignItems: 'center',
+        justifyContent: 'center',
         borderWidth: 1,
         borderColor: '#000',
-    },
-    requestRejectText: {
-        fontSize: 12,
-        fontWeight: '700',
-        color: '#000',
     },
     requestsClose: {
         marginTop: 12,

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo } from 'react';
 import {
   Text,
   StyleSheet,
@@ -11,67 +11,49 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../types/navigation';
+import { useChatList } from './useChatList';
 
 type ChatListNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Main'>;
 
-interface Chat {
-  id: string;
-  name: string;
-  message: string;
-  time: string;
-  avatar: string;
-  isRead: boolean;
-}
-
-const chatData: Chat[] = [
-  { id: '1', name: 'Shahid Anowar', message: 'You: Just to not leave you out of anything', time: 'Yesterday', avatar: 'SA', isRead: false },
-  { id: '2', name: 'Sourav Sharma', message: 'Kaha hai ?', time: '11:11', avatar: 'SS', isRead: true },
-  { id: '3', name: 'Sourav Sharma', message: 'Kaha hai ?', time: '11:11', avatar: 'SS', isRead: false },
-  { id: '4', name: 'Sanjeev Iqbal Ahmed', message: 'Khana khaya?', time: '15:11', avatar: 'SI', isRead: true },
-  { id: '5', name: 'Sanjeev Iqbal Ahmed', message: 'Khana khaya?', time: '15:11', avatar: 'SI', isRead: true },
-  { id: '6', name: 'Faruk Khan', message: 'You: Has ki thoda bhai', time: 'Yesterday', avatar: 'FK', isRead: true },
-  { id: '7', name: 'Sanjeev Iqbal Ahmed', message: 'Khana khaya?', time: '15:11', avatar: 'SI', isRead: true },
-  { id: '8', name: 'Shahid Anowar', message: 'You: Just to not leave you out of anything', time: 'Yesterday', avatar: 'SA', isRead: true },
-  { id: '9', name: 'Sanjeev Iqbal Ahmed', message: 'Khana khaya?', time: '15:11', avatar: 'SI', isRead: false },
-  { id: '10', name: 'Shahid Anowar', message: 'You: Just to not leave you out of anything', time: 'Yesterday', avatar: 'SA', isRead: true },
-];
-
 const ChatScreen: React.FC = () => {
   const navigation = useNavigation<ChatListNavigationProp>();
+  const { chats, isLoading } = useChatList();
 
-  const [chats, setChats] = useState<Chat[]>(chatData);
-  const [unreadCount, setUnreadCount] = useState(
-    chatData.filter(c => !c.isRead).length
-  );
+  const unreadCount = useMemo(() => {
+    return chats.reduce((total, chat) => total + chat.unreadCount, 0);
+  }, [chats]);
 
-  const handleChatItemPress = (chat: Chat) => {
-    // Mark as read
-    if (!chat.isRead) {
-      setUnreadCount(prev => prev - 1);
-      setChats(prevChats =>
-        prevChats.map(c =>
-          c.id === chat.id ? { ...c, isRead: true } : c
-        )
-      );
-    }
-
-    // Navigate to the chat screen with contact name
+  const handleChatItemPress = (chat: typeof chats[number]) => {
     navigation.navigate('ChatDetail', {
       contactName: chat.name,
-      contactId: chat.id
+      contactId: chat.friendId,
     });
   };
 
-  const renderChatItem = ({ item }: { item: Chat }) => (
-    <ChatItem
-      name={item.name}
-      message={item.message}
-      time={item.time}
-      avatar={item.avatar}
-      isRead={item.isRead}
-      onPress={() => handleChatItemPress(item)}
-    />
-  );
+  const renderChatItem = ({ item }: { item: typeof chats[number] }) => {
+    const lastMessageText = item.lastMessage?.text || '';
+    const timestamp = item.lastMessage?.timestamp;
+    const timeLabel = timestamp ? new Date(timestamp).toLocaleTimeString() : '';
+
+    const initials = item.name
+      .split(' ')
+      .map(part => part[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
+
+    return (
+      <ChatItem
+        name={item.name}
+        message={lastMessageText}
+        time={timeLabel}
+        avatar={initials}
+        isRead={item.unreadCount === 0}
+        onPress={() => handleChatItemPress(item)}
+        unreadCount={item.unreadCount}
+      />
+    );
+  };
 
   const handleFriendsPageButton = () => {
     navigation.navigate('Friends');
@@ -91,10 +73,17 @@ const ChatScreen: React.FC = () => {
         <FlatList
           data={chats}
           renderItem={renderChatItem}
-          keyExtractor={item => item.id}
+          keyExtractor={item => item.friendId}
           style={styles.chatList}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.chatListContent}
+          ListEmptyComponent={
+            isLoading ? (
+              <Text style={styles.emptyText}>Loading chats...</Text>
+            ) : (
+              <Text style={styles.emptyText}>No conversations yet. Start messaging a friend!</Text>
+            )
+          }
         />
       </View>
 
@@ -153,6 +142,12 @@ const styles = StyleSheet.create({
   },
   chatListContent: {
     paddingBottom: 100,
+  },
+  emptyText: {
+    textAlign: 'center',
+    color: '#666',
+    marginTop: 24,
+    fontSize: 14,
   },
   fab: {
     position: 'absolute',

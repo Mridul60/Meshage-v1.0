@@ -4,6 +4,7 @@ import type { Message } from '../../../types';
 import { routingService } from '../../../services/RoutingService';
 import type { DataPacket } from '../../../types/routing';
 import { NodeIdentity } from '../../../services/NodeIdentity';
+import { ChatEvents } from '../../../services/ChatEvents';
 
 interface UsePersonalChatProps {
   friendId: string;
@@ -41,6 +42,11 @@ export const usePersonalChat = ({ friendId, friendName, friendAddress }: UsePers
       const history = await StorageService.getChatHistory(friendId);
       if (history.length > 0) {
         setMessages(history);
+        const lastTimestamp = history[history.length - 1]?.timestamp;
+        if (lastTimestamp) {
+          StorageService.markChatAsRead(friendId, lastTimestamp);
+        }
+        ChatEvents.emitHistoryUpdated(friendId, history as Message[]);
         console.log(`Loaded ${history.length} messages from history for friend: ${friendId}`);
       }
     };
@@ -111,6 +117,8 @@ export const usePersonalChat = ({ friendId, friendName, friendAddress }: UsePers
 
           const updated = [...prev, newMessage];
           StorageService.saveChatHistory(friendId, updated);
+          StorageService.markChatAsRead(friendId, newMessage.timestamp);
+          ChatEvents.emitHistoryUpdated(friendId, updated);
           return updated;
         });
         console.log('✅ PersonalChat - Received routed DIRECT_MSG for this chat:', messageContent);
@@ -141,6 +149,8 @@ export const usePersonalChat = ({ friendId, friendName, friendAddress }: UsePers
       const updated = [...prev, newMessage];
       // Save to storage
       StorageService.saveChatHistory(friendId, updated);
+      StorageService.markChatAsRead(friendId, newMessage.timestamp);
+      ChatEvents.emitHistoryUpdated(friendId, updated);
       return updated;
     });
 

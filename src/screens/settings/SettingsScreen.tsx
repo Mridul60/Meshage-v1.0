@@ -398,37 +398,36 @@ export default function SettingsScreen() {
 
         try {
             const alreadyFriend = await StorageService.isFriend(scannedPersistentId);
-            const message = `Name: ${scannedName}\nID: ${scannedPersistentId}`;
 
             if (alreadyFriend) {
-                Alert.alert('Already a friend', message);
+                Alert.alert(
+                    'Meshage',
+                    `${scannedName} is already in your friends list.`,
+                );
                 return;
             }
 
+            // Save a pending QR-based outgoing friendship so Broadcast can
+            // complete the Nearby handshake when devices are connected.
+            await StorageService.addFriendRequest({
+                persistentId: scannedPersistentId,
+                displayName: scannedName,
+                deviceAddress: '',
+                timestamp: Date.now(),
+                type: 'outgoing',
+            });
+
+            // Also add this user to our local friends list immediately so
+            // they appear in the Friends UI even before Nearby connects.
+            await StorageService.addFriend({
+                persistentId: scannedPersistentId,
+                displayName: scannedName,
+                deviceAddress: '',
+            });
+
             Alert.alert(
-                'Add Friend',
-                message,
-                [
-                    { text: 'Cancel', style: 'cancel' },
-                    {
-                        text: 'Send Friend Request',
-                        onPress: async () => {
-                            try {
-                                await StorageService.addFriendRequest({
-                                    persistentId: scannedPersistentId,
-                                    displayName: scannedName,
-                                    deviceAddress: '',
-                                    timestamp: Date.now(),
-                                    type: 'outgoing',
-                                });
-                                Alert.alert('Friend Request', 'Friend request saved for this user.');
-                            } catch (error) {
-                                console.error('Error saving friend request from QR scan:', error);
-                                Alert.alert('Error', 'Could not save friend request.');
-                            }
-                        },
-                    },
-                ],
+                'Friend linked',
+                `${scannedName} will be added as your friend once you are connected on Broadcast.`,
             );
         } catch (error) {
             console.error('Error handling QR scan result:', error);
