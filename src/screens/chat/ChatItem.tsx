@@ -7,10 +7,19 @@ interface ChatItemProps {
   time: string;
   avatar: string;
   isRead: boolean;
+  unreadCount?: number;
   onPress: () => void;
 }
 
-const ChatItem: React.FC<ChatItemProps> = ({ name, message, time, avatar, isRead, onPress }) => {
+const ChatItem: React.FC<ChatItemProps> = ({
+  name,
+  message,
+  time,
+  avatar,
+  isRead,
+  unreadCount,
+  onPress,
+}) => {
   return (
     <TouchableOpacity style={styles.container} onPress={onPress} activeOpacity={0.8}>
       <View style={styles.avatar}>
@@ -23,6 +32,11 @@ const ChatItem: React.FC<ChatItemProps> = ({ name, message, time, avatar, isRead
           <View style={styles.timeContainer}>
             <Text style={[styles.time, !isRead && styles.unreadTime]}>{time}</Text>
             {!isRead && <View style={styles.unreadDot} />}
+            {!!unreadCount && unreadCount > 0 && (
+              <View style={styles.unreadBadge}>
+                <Text style={styles.unreadBadgeText}>{Math.min(unreadCount, 99)}</Text>
+              </View>
+            )}
           </View>
         </View>
 
@@ -102,6 +116,21 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: '#F59E0B',
     marginLeft: 6,
+  },
+  unreadBadge: {
+    marginLeft: 6,
+    backgroundColor: '#F59E0B',
+    borderRadius: 10,
+    minWidth: 20,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  unreadBadgeText: {
+    color: '#000',
+    fontSize: 11,
+    fontWeight: '700',
   },
 });
 
