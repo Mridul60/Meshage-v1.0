@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { StatusBar, View, TouchableOpacity, StyleSheet } from 'react-native';
+import { StatusBar, View, TouchableOpacity, StyleSheet, NativeModules } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -7,6 +7,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { StorageService } from './src/utils/storage';
+import { NetworkingProvider } from './src/providers/NetworkingProvider';
 
 import OnboardingScreen from './src/screens/OnboardingScreen';
 
@@ -131,30 +132,58 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <SafeAreaProvider>
         <StatusBar barStyle="light-content" backgroundColor="#1a1a1a" />
-        <NavigationContainer>
-          <Stack.Navigator
-            initialRouteName={initialRouteName} // change to your "working" screen 
-            screenOptions={{ headerShown: false }}
-          >
-            <Stack.Screen name="Onboarding" component={OnboardingScreen} />
-            <Stack.Screen name="Main" component={MainTabs} />
-            <Stack.Screen name="ChatDetail" component={ChatDetailScreen as any}
-              options={{ animation: 'slide_from_right' }} />
-            <Stack.Screen
-              name="Friends"
-              component={FriendsScreen}
-              options={{
-                presentation: 'modal', // 🪄 makes it slide up like WhatsApp
-                animation: 'slide_from_bottom',
-              }}
-            />
-            <Stack.Screen
-              name="MoreInfoPage"
-              component={MoreInfoPage}
-            // options={{ headerShown: true, title: 'More Information' }} 
-            />
-          </Stack.Navigator>
-        </NavigationContainer>
+        {NativeModules?.MeshNetwork ? (
+          <NetworkingProvider>
+            <NavigationContainer>
+              <Stack.Navigator
+                initialRouteName={initialRouteName} // change to your "working" screen 
+                screenOptions={{ headerShown: false }}
+              >
+                <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+                <Stack.Screen name="Main" component={MainTabs} />
+                <Stack.Screen name="ChatDetail" component={ChatDetailScreen as any}
+                  options={{ animation: 'slide_from_right' }} />
+                <Stack.Screen
+                  name="Friends"
+                  component={FriendsScreen}
+                  options={{
+                    presentation: 'modal', // 🪄 makes it slide up like WhatsApp
+                    animation: 'slide_from_bottom',
+                  }}
+                />
+                <Stack.Screen
+                  name="MoreInfoPage"
+                  component={MoreInfoPage}
+                // options={{ headerShown: true, title: 'More Information' }} 
+                />
+              </Stack.Navigator>
+            </NavigationContainer>
+          </NetworkingProvider>
+        ) : (
+          <NavigationContainer>
+            <Stack.Navigator
+              initialRouteName={initialRouteName}
+              screenOptions={{ headerShown: false }}
+            >
+              <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+              <Stack.Screen name="Main" component={MainTabs} />
+              <Stack.Screen name="ChatDetail" component={ChatDetailScreen as any}
+                options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen
+                name="Friends"
+                component={FriendsScreen}
+                options={{
+                  presentation: 'modal',
+                  animation: 'slide_from_bottom',
+                }}
+              />
+              <Stack.Screen
+                name="MoreInfoPage"
+                component={MoreInfoPage}
+              />
+            </Stack.Navigator>
+          </NavigationContainer>
+        )}
       </SafeAreaProvider>
     </QueryClientProvider>
   );
