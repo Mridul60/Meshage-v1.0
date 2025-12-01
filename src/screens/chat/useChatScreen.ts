@@ -383,39 +383,57 @@ export const useChatScreen = () => {
       (data: MessageReceivedEvent) => {
         try {
           const raw = data.message;
+          console.log('[useChatScreen] Raw Mesh message received', {
+            fromAddress: data.fromAddress,
+            length: raw?.length,
+          });
           let envelope: NodeMessage<any>;
 
           try {
             envelope = JSON.parse(raw);
           } catch {
-            // Not a NodeMessage envelope; ignore for routing layer
+            console.log('[useChatScreen] Message not JSON, ignoring for routing');
             return;
           }
 
           if (!envelope || !envelope.nodeId || !envelope.sessionId) {
+            console.log('[useChatScreen] Invalid envelope, missing ids');
             return;
           }
 
           // SELF-FILTER: ignore any packet from our own nodeId
           const myNodeId = NodeIdentity.tryGetNodeId();
           if (myNodeId && envelope.nodeId === myNodeId) {
+            console.log('[useChatScreen] Ignoring self-originated envelope');
             return;
           }
+
+          console.log('[useChatScreen] Envelope accepted', {
+            nodeId: envelope.nodeId,
+            sessionId: envelope.sessionId,
+            type: envelope.type,
+          });
 
           // Allow discovery service to update peer list for any valid non-self message
           windsurfDiscovery.handleIncoming(envelope, data.fromAddress);
 
           if (envelope.type !== 'DATA' || !envelope.payload) {
+            console.log('[useChatScreen] Envelope not DATA or missing payload');
             return;
           }
 
           // Payload is the routing Packet for DATA messages
           const packet = envelope.payload as any;
           if (!packet || !packet.type) {
+            console.log('[useChatScreen] DATA payload missing packet info');
             return;
           }
 
-          routingService.handleIncomingPacket(packet);
+          console.log('[useChatScreen] Forwarding packet to routingService', {
+            packetType: packet.type,
+            packetId: packet.packetId,
+          });
+          routingService.handleIncomingPacket(packet, data.fromAddress);
         } catch (error) {
           console.error('Error handling incoming NodeMessage in useChatScreen:', error);
         }
