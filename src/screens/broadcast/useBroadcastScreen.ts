@@ -180,6 +180,11 @@ export const useBroadcastScreen = () => {
                 });
             },
             onMessageReceived: ({ fromId, message, timestamp }) => {
+                console.log('[useBroadcastScreen] Raw Nearby message received', {
+                    fromId,
+                    length: message?.length,
+                    timestamp,
+                });
 
                 // First try to parse as NodeMessage JSON (used for broadcast chat)
                 let parsed: NodeMessage | null = null;
@@ -187,19 +192,28 @@ export const useBroadcastScreen = () => {
                     parsed = JSON.parse(message) as NodeMessage;
                 } catch {
                     parsed = null;
+                    console.log('[useBroadcastScreen] Message not JSON, falling back to legacy handling');
                 }
 
                 if (parsed && parsed.nodeId && parsed.sessionId) {
                     // SELF-FILTER: ignore any packet from our own nodeId
                     if (parsed.nodeId === nodeIdRef.current) {
+                        console.log('[useBroadcastScreen] Ignoring self-originated broadcast packet');
                         return;
                     }
+
+                    console.log('[useBroadcastScreen] Parsed NodeMessage payload', {
+                        type: parsed.type,
+                        payloadKind: (parsed.payload as any)?.kind,
+                        nodeId: parsed.nodeId,
+                    });
 
                     if (parsed.type === 'DATA' && parsed.payload) {
                         // Handle broadcast chat messages
                         if (parsed.payload.kind === 'BROADCAST_MESSAGE' && typeof parsed.payload.text === 'string') {
                             const peer = peersRef.current.find(p => p.deviceAddress === fromId);
                             const senderName = peer?.displayName || peer?.deviceName || 'Unknown';
+
                             const newMessage: Message = {
                                 id: `${timestamp}-${fromId}`,
                                 text: parsed.payload.text,
@@ -209,6 +223,11 @@ export const useBroadcastScreen = () => {
                                 isSent: false,
                             };
                             setMessages(prev => [...prev, newMessage]);
+                            console.log('[useBroadcastScreen] Stored incoming broadcast message', {
+                                fromId,
+                                senderName,
+                                text: parsed.payload.text,
+                            });
                             return;
                         }
                     }
@@ -218,6 +237,7 @@ export const useBroadcastScreen = () => {
                 if (typeof message === 'string') {
                     // Handle raw friend request messages: "FRIEND_REQUEST:persistentId:username"
                     if (message.startsWith('FRIEND_REQUEST:')) {
+                        console.log('[useBroadcastScreen] Handling FRIEND_REQUEST payload');
                         const parts = message.split(':', 3);
                         if (parts.length === 3) {
                             const senderPersistentId = parts[1];
@@ -251,6 +271,7 @@ export const useBroadcastScreen = () => {
 
                     // Handle friend acceptance acknowledgement: "FRIEND_ACCEPT:persistentId:username"
                     if (message.startsWith('FRIEND_ACCEPT:')) {
+                        console.log('[useBroadcastScreen] Handling FRIEND_ACCEPT payload');
                         const parts = message.split(':', 3);
                         if (parts.length === 3) {
                             const accepterPersistentId = parts[1];
@@ -282,7 +303,10 @@ export const useBroadcastScreen = () => {
     }, []);
 
     const handleSendMessage = () => {
-        if (!messageText.trim()) return;
+        if (!messageText.trim()) {
+            console.log('[useBroadcastScreen] Ignoring empty broadcast send');
+            return;
+        }
 
         // Optimistically display the message in the UI
         const newMessage: Message = {
@@ -295,6 +319,10 @@ export const useBroadcastScreen = () => {
         };
 
         setMessages(prev => [...prev, newMessage]);
+        console.log('[useBroadcastScreen] Sending broadcast message', {
+            text: messageText,
+            username,
+        });
         const envelope: NodeMessage = {
             nodeId: nodeIdRef.current,
             sessionId: sessionIdRef.current,
@@ -306,7 +334,13 @@ export const useBroadcastScreen = () => {
             },
         };
 
-        Nearby.sendMessage(JSON.stringify(envelope), null).catch(() => { });
+        Nearby.sendMessage(JSON.stringify(envelope), null)
+            .then(() => {
+                console.log('[useBroadcastScreen] Broadcast message handed to Nearby');
+            })
+            .catch(error => {
+                console.error('[useBroadcastScreen] Failed to send broadcast message', error);
+            });
         setMessageText('');
 
         setTimeout(() => {

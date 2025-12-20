@@ -25,6 +25,7 @@ export const usePersonalChat = ({ friendId, friendName, friendAddress }: UsePers
   // Load user data and chat history
   useEffect(() => {
     const loadUserData = async () => {
+      console.log('[usePersonalChat] Loading user data for chat', friendId);
       const persistentId = await StorageService.getPersistentId();
       setMyPersistentId(persistentId);
 
@@ -47,8 +48,12 @@ export const usePersonalChat = ({ friendId, friendName, friendAddress }: UsePers
           StorageService.markChatAsRead(friendId, lastTimestamp);
         }
         ChatEvents.emitHistoryUpdated(friendId, history as Message[]);
-        console.log(`Loaded ${history.length} messages from history for friend: ${friendId}`);
+        console.log('[usePersonalChat] Loaded chat history', {
+          friendId,
+          count: history.length,
+        });
       }
+      console.log('[usePersonalChat] User data ready', { friendId, persistentId, username });
     };
     loadUserData();
   }, [friendId]);
@@ -84,16 +89,26 @@ export const usePersonalChat = ({ friendId, friendName, friendAddress }: UsePers
       try {
         // Only process packets delivered to us
         if (packet.destinationId !== myPersistentId) {
+          console.log('[usePersonalChat] Ignoring packet for different destination', {
+            friendId,
+            destinationId: packet.destinationId,
+            myPersistentId,
+          });
           return;
         }
 
         const payload: any = packet.payload;
         if (!payload || payload.kind !== 'DIRECT_MSG') {
+          console.log('[usePersonalChat] Ignoring non-DIRECT_MSG payload', payload?.kind);
           return;
         }
 
         // Ensure this message is for this particular chat (from this friend)
         if (packet.sourceId !== friendId) {
+          console.log('[usePersonalChat] Packet from different friend, skipping', {
+            expected: friendId,
+            actual: packet.sourceId,
+          });
           return;
         }
 
@@ -111,7 +126,7 @@ export const usePersonalChat = ({ friendId, friendName, friendAddress }: UsePers
         setMessages(prev => {
           const isDuplicate = prev.some(msg => msg.id === newMessage.id);
           if (isDuplicate) {
-            console.log('PersonalChat - Duplicate routed message detected, skipping');
+            console.log('[usePersonalChat] Duplicate message detected, skipping', newMessage.id);
             return prev;
           }
 
@@ -119,17 +134,28 @@ export const usePersonalChat = ({ friendId, friendName, friendAddress }: UsePers
           StorageService.saveChatHistory(friendId, updated);
           StorageService.markChatAsRead(friendId, newMessage.timestamp);
           ChatEvents.emitHistoryUpdated(friendId, updated);
+          console.log('[usePersonalChat] Stored incoming message', {
+            friendId,
+            packetId: packet.packetId,
+            timestamp: newMessage.timestamp,
+          });
           return updated;
         });
-        console.log('✅ PersonalChat - Received routed DIRECT_MSG for this chat:', messageContent);
+        console.log('[usePersonalChat] Received DIRECT_MSG for chat', {
+          friendId,
+          packetId: packet.packetId,
+          text: messageContent,
+        });
       } catch (error) {
-        console.error('PersonalChat - Error handling routed DataPacket:', error);
+        console.error('[usePersonalChat] Error handling routed DataPacket:', error);
       }
     };
 
     routingService.addDataHandler(handler);
+    console.log('[usePersonalChat] Registered data handler for chat', friendId);
     return () => {
       routingService.removeDataHandler(handler);
+      console.log('[usePersonalChat] Removed data handler for chat', friendId);
     };
   }, [friendId, friendName, myPersistentId]);
 
@@ -161,8 +187,11 @@ export const usePersonalChat = ({ friendId, friendName, friendAddress }: UsePers
       timestamp: Date.now(),
     };
 
+    console.log('[usePersonalChat] Sending DIRECT_MSG', {
+      friendId,
+      text: messageText,
+    });
     routingService.sendData(friendId, payload);
-    console.log('PersonalChat - Sending routed DIRECT_MSG to friend:', friendId);
 
     setMessageText('');
 

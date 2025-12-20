@@ -18,8 +18,8 @@ import type {
   FriendRequest
 } from '../../types';
 
-const { MeshNetwork } = NativeModules;
-const MeshNetworkEvents = new NativeEventEmitter(MeshNetwork);
+const MeshNetwork = NativeModules.MeshNetwork;
+const MeshNetworkEvents = MeshNetwork ? new NativeEventEmitter(MeshNetwork) : null;
 
 // Utility function to parse device identifier "username|persistentId"
 const parseDeviceIdentifier = (deviceName: string): { displayName: string; persistentId?: string } => {
@@ -107,6 +107,12 @@ export const useChatScreen = () => {
   };
 
   useEffect(() => {
+    if (!MeshNetwork || !MeshNetworkEvents) {
+      console.error('MeshNetwork native module unavailable. Skipping chat networking setup.');
+      setStatus('Mesh module unavailable');
+      return;
+    }
+
     const initializeApp = async () => {
       // Load username and persistent ID from storage
       const savedUsername = await StorageService.getUsername();
@@ -147,9 +153,13 @@ export const useChatScreen = () => {
       windsurfDiscovery.start(savedUsername || 'User');
 
       // Update device name with username AND persistent ID
-      MeshNetwork.setDeviceName(deviceIdentifier);
+      try {
+        MeshNetwork.setDeviceName?.(deviceIdentifier);
+      } catch (error) {
+        console.error('Failed to set device name on MeshNetwork:', error);
+      }
 
-      MeshNetwork.init();
+      MeshNetwork.init?.();
       setStatus('Initialized');
 
       // Auto-start discovery after permissions
@@ -159,7 +169,7 @@ export const useChatScreen = () => {
         if (hasPermission) {
           setStatus('Auto-starting discovery...');
           setTimeout(() => {
-            MeshNetwork.discoverPeers();
+            MeshNetwork.discoverPeers?.();
           }, 1000); // Small delay to ensure initialization
         } else {
           setStatus('Permissions required. Tap Discover Peers.');
@@ -187,7 +197,7 @@ export const useChatScreen = () => {
           attempts: attempts + 1
         });
 
-        MeshNetwork.connectToPeer(peer.deviceAddress);
+        MeshNetwork.connectToPeer?.(peer.deviceAddress);
         connectionAttempts.current.set(peer.deviceAddress, attempts + 1);
 
         // Set retry timer (retry after 3 seconds if connection fails)
@@ -287,7 +297,7 @@ export const useChatScreen = () => {
           console.log('Discovery failed - Auto-retrying in 3 seconds...');
           setTimeout(() => {
             console.log('Restarting discovery...');
-            MeshNetwork.discoverPeers();
+            MeshNetwork.discoverPeers?.();
           }, 3000); // Retry after 3 seconds
 
         } else if (eventStatus.toLowerCase().includes('already')) {
@@ -297,10 +307,10 @@ export const useChatScreen = () => {
 
           // Stop and restart
           setTimeout(() => {
-            MeshNetwork.stopDiscovery();
+            MeshNetwork.stopDiscovery?.();
             setTimeout(() => {
               console.log('Restarting discovery after reset...');
-              MeshNetwork.discoverPeers();
+              MeshNetwork.discoverPeers?.();
             }, 1000);
           }, 1000);
 
@@ -310,7 +320,7 @@ export const useChatScreen = () => {
       },
     );
 
-    const onConnectionChangedListener = MeshNetworkEvents.addListener(
+    const onConnectionChangedListener = MeshNetworkEvents?.addListener(
       'onConnectionChanged',
       (event: ConnectionInfo | boolean) => {
         console.log('Connection changed:', event);
@@ -333,7 +343,7 @@ export const useChatScreen = () => {
       },
     );
 
-    const onPeerConnectedListener = MeshNetworkEvents.addListener(
+    const onPeerConnectedListener = MeshNetworkEvents?.addListener(
       'onPeerConnected',
       (data: { address: string } | string) => {
         const address = typeof data === 'string' ? data : data.address;
@@ -360,7 +370,7 @@ export const useChatScreen = () => {
       },
     );
 
-    const onPeerDisconnectedListener = MeshNetworkEvents.addListener(
+    const onPeerDisconnectedListener = MeshNetworkEvents?.addListener(
       'onPeerDisconnected',
       (data: { address: string } | string) => {
         const address = typeof data === 'string' ? data : data.address;
@@ -378,44 +388,62 @@ export const useChatScreen = () => {
       },
     );
 
-        const onMessageReceivedListener = MeshNetworkEvents.addListener(
+        const onMessageReceivedListener = MeshNetworkEvents?.addListener(
       'onMessageReceived',
       (data: MessageReceivedEvent) => {
         try {
           const raw = data.message;
+          console.log('[useChatScreen] Raw Mesh message received', {
+            fromAddress: data.fromAddress,
+            length: raw?.length,
+          });
           let envelope: NodeMessage<any>;
 
           try {
             envelope = JSON.parse(raw);
           } catch {
-            // Not a NodeMessage envelope; ignore for routing layer
+            console.log('[useChatScreen] Message not JSON, ignoring for routing');
             return;
           }
 
           if (!envelope || !envelope.nodeId || !envelope.sessionId) {
+            console.log('[useChatScreen] Invalid envelope, missing ids');
             return;
           }
 
           // SELF-FILTER: ignore any packet from our own nodeId
           const myNodeId = NodeIdentity.tryGetNodeId();
           if (myNodeId && envelope.nodeId === myNodeId) {
+            console.log('[useChatScreen] Ignoring self-originated envelope');
             return;
           }
+
+          console.log('[useChatScreen] Envelope accepted', {
+            nodeId: envelope.nodeId,
+            sessionId: envelope.sessionId,
+            type: envelope.type,
+          });
 
           // Allow discovery service to update peer list for any valid non-self message
           windsurfDiscovery.handleIncoming(envelope, data.fromAddress);
 
           if (envelope.type !== 'DATA' || !envelope.payload) {
+            console.log('[useChatScreen] Envelope not DATA or missing payload');
             return;
           }
 
           // Payload is the routing Packet for DATA messages
           const packet = envelope.payload as any;
           if (!packet || !packet.type) {
+            console.log('[useChatScreen] DATA payload missing packet info');
             return;
           }
 
-          routingService.handleIncomingPacket(packet);
+          console.log('[useChatScreen] Forwarding packet to routingService', {
+            packetType: packet.type,
+            packetId: packet.packetId,
+          });
+          routingService.handleIncomingPacket(packet, data.fromAddress);
         } catch (error) {
           console.error('Error handling incoming NodeMessage in useChatScreen:', error);
         }
@@ -430,13 +458,13 @@ export const useChatScreen = () => {
     //   }
     // );
 
-    const onMessageSentListener = MeshNetworkEvents.addListener(
+    const onMessageSentListener = MeshNetworkEvents?.addListener(
       'onMessageSent',
       (data: { message: string; success: boolean }) => {
         console.log('Message sent:', data);
       },
     );
-    const onConnectionErrorListener = MeshNetworkEvents.addListener(
+    const onConnectionErrorListener = MeshNetworkEvents?.addListener(
       'onConnectionError',
       (error: any) => {
         // Handle specific error codes
@@ -495,14 +523,14 @@ export const useChatScreen = () => {
     );
 
     return () => {
-      onPeersFoundListener.remove();
-      onDiscoveryStateChangedListener.remove();
-      onConnectionChangedListener.remove();
-      onPeerConnectedListener.remove();
-      onPeerDisconnectedListener.remove();
-      onMessageReceivedListener.remove();
-      onMessageSentListener.remove();
-      onConnectionErrorListener.remove();
+      onPeersFoundListener?.remove();
+      onDiscoveryStateChangedListener?.remove();
+      onConnectionChangedListener?.remove();
+      onPeerConnectedListener?.remove();
+      onPeerDisconnectedListener?.remove();
+      onMessageReceivedListener?.remove();
+      onMessageSentListener?.remove();
+      onConnectionErrorListener?.remove();
 
       // Clear all retry timers
       connectionRetryTimers.current.forEach((timer) => {
@@ -517,21 +545,21 @@ export const useChatScreen = () => {
     const hasPermission = await requestPermissions();
     if (hasPermission) {
       setPeers([]);
-      MeshNetwork.discoverPeers();
+      MeshNetwork.discoverPeers?.();
     } else {
       setStatus('Permission denied. Cannot discover peers.');
     }
   };
 
   const handleStopDiscovery = () => {
-    MeshNetwork.stopDiscovery();
+    MeshNetwork.stopDiscovery?.();
     setIsDiscovering(false);
   };
 
   const handleResetDiscovery = () => {
     // Stop any ongoing discovery and reset local UI state
     try {
-      MeshNetwork.stopDiscovery();
+      MeshNetwork.stopDiscovery?.();
     } catch (e) {
       // no-op
     }
@@ -542,12 +570,12 @@ export const useChatScreen = () => {
 
   const handleConnectToPeer = (deviceAddress: string) => {
     console.log('Connecting to peer:', deviceAddress);
-    MeshNetwork.connectToPeer(deviceAddress);
+    MeshNetwork.connectToPeer?.(deviceAddress);
     setSelectedPeer(deviceAddress);
   };
 
   const handleDisconnect = () => {
-    MeshNetwork.disconnect();
+    MeshNetwork.disconnect?.();
     setMessages([]);
     setSelectedPeer(null);
   };
